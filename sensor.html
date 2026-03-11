@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>DPO Laser Level App</title>
+    <!-- Шрифты и иконки -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@500;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #121212;
+            --panel-bg: #1e1e1e;
+            --primary: #2979ff;
+            --text-main: #ffffff;
+            --text-muted: #888888;
+            --success: #00e676;
+            --warning: #ffea00;
+            --danger: #ff1744;
+            --laser: #ff0000;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: #000;
+            color: var(--text-main);
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        .app-container {
+            width: 100%;
+            max-width: 480px;
+            background-color: var(--bg-color);
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 0 30px rgba(0,0,0,0.8);
+            border-left: 1px solid #333;
+            border-right: 1px solid #333;
+            height: 100vh;
+        }
+
+        .screen {
+            display: none;
+            flex-direction: column;
+            height: 100%;
+            width: 100%;
+            position: absolute;
+            top: 0; left: 0;
+            background-color: var(--bg-color);
+            z-index: 1;
+            overflow-y: auto;
+        }
+        .screen.active { display: flex; animation: fadeIn 0.3s ease-in-out; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        header {
+            background-color: var(--panel-bg);
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #333;
+            position: sticky; top: 0; z-index: 10;
+        }
+        
+        .header-title { display: flex; align-items: center; gap: 10px; font-weight: 500; font-size: 1.2rem; }
+        .icon-btn { background: none; border: none; color: var(--text-main); font-size: 24px; cursor: pointer; }
+        
+        /* --- ИЗМЕНЕН ОФОРМЛЕНИЕ КНОПКИ --- */
+        .btn-primary {
+            background-color: var(--primary); 
+            color: white; 
+            border: none;
+            padding: 15px; 
+            border-radius: 8px; 
+            font-size: 0.95rem; /* Меньший размер */
+            font-weight: 400;   /* Более тонкий, мягкий шрифт */
+            letter-spacing: 0.3px; /* Легкий интервал для читабельности */
+            cursor: pointer; 
+            width: 100%; 
+            margin-top: 10px; 
+            transition: background 0.2s;
+        }
+        .btn-primary:active { background-color: #1c54b2; }
+
+        #screen-loading { justify-content: center; align-items: center; z-index: 100; }
+        .spinner { border: 4px solid rgba(255,255,255,0.1); border-top: 4px solid var(--primary); border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin-bottom: 20px;}
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        #screen-auth { padding: 30px; justify-content: center; z-index: 50; }
+        .auth-logo { text-align: center; font-size: 2rem; margin-bottom: 40px; font-weight: 700; color: var(--primary); }
+        .input-group { margin-bottom: 20px; }
+        .input-group label { display: block; margin-bottom: 5px; color: var(--text-muted); font-size: 0.9rem; }
+        .input-group input { width: 100%; padding: 15px; border-radius: 8px; border: 1px solid #333; background: var(--panel-bg); color: white; outline: none; }
+        .auth-links { text-align: center; margin-top: 20px; font-size: 0.9rem; color: var(--primary); text-decoration: underline; cursor: pointer; }
+
+        .status-badge { font-size: 0.8rem; padding: 5px 10px; border-radius: 12px; background-color: #333; transition: all 0.3s; }
+        .ble-status { display: flex; align-items: center; gap: 5px; font-size: 0.8rem; color: var(--text-muted); cursor: pointer; padding: 5px; border-radius: 5px; background: #222; margin-top: 5px;}
+        .ble-status.connected { color: var(--success); }
+        
+        .target-section { padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        .target-container { position: relative; width: 260px; height: 260px; background-color: var(--panel-bg); border-radius: 50%; border: 2px solid #444; margin-top: 15px; overflow: hidden; box-shadow: inset 0 0 20px rgba(0,0,0,0.8); }
+        .crosshair-x, .crosshair-y { position: absolute; background-color: #444; }
+        .crosshair-x { width: 100%; height: 1px; top: 50%; left: 0; transform: translateY(-50%); }
+        .crosshair-y { height: 100%; width: 1px; left: 50%; top: 0; transform: translateX(-50%); }
+        .circle { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); border: 1px dashed #555; border-radius: 50%; pointer-events: none; }
+        .circle-1 { width: 50%; height: 50%; border-color: var(--success); opacity: 0.4;}
+        .circle-2 { width: 80%; height: 80%; }
+        .laser-dot { position: absolute; width: 12px; height: 12px; background-color: var(--laser); border-radius: 50%; top: 50%; left: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 15px 5px rgba(255, 0, 0, 0.7); transition: top 0.4s ease-out, left 0.4s ease-out; opacity: 0; }
+        .laser-dot.active { opacity: 1; }
+
+        .data-panel { display: flex; padding: 0 20px; gap: 15px; margin-bottom: 20px; }
+        .data-card { flex: 1; background-color: var(--panel-bg); padding: 15px; border-radius: 12px; text-align: center; border-bottom: 4px solid #333; }
+        .data-card h2 { font-size: 0.9rem; color: var(--text-muted); margin-bottom: 5px; }
+        .data-card .value { font-family: 'Roboto Mono', monospace; font-size: 1.8rem; font-weight: 700; color: #555; }
+        
+        .controls-panel { padding: 0 20px 20px; margin-top: auto; }
+
+        .history-list { padding: 15px; }
+        .history-item { background: var(--panel-bg); border-radius: 8px; padding: 15px; margin-bottom: 10px; border-left: 4px solid var(--success); }
+        .history-item.fail { border-left-color: var(--danger); }
+        .hist-header { display: flex; justify-content: space-between; margin-bottom: 8px; font-weight: 500;}
+        .hist-obj { color: var(--primary); font-size: 0.9rem;}
+        .hist-date { font-size: 0.8rem; color: var(--text-muted); }
+        .hist-details { font-size: 0.85rem; color: #ccc; line-height: 1.4; }
+
+        .radar-box { height: 200px; display: flex; justify-content: center; align-items: center; position: relative;}
+        .radar { width: 100px; height: 100px; border-radius: 50%; background: rgba(41, 121, 255, 0.2); border: 1px solid var(--primary); animation: radarPulse 2s infinite; }
+        @keyframes radarPulse { 0% { transform: scale(0.5); opacity: 1; } 100% { transform: scale(2); opacity: 0; } }
+        .device-list { padding: 20px; }
+        .device-item { padding: 15px; background: var(--panel-bg); margin-bottom: 10px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+        .device-item:hover { background: #2a2a2a; }
+
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+
+    <div id="screen-loading" class="screen active">
+        <div class="spinner"></div>
+        <h2>DPO Systems</h2>
+        <p style="color: var(--text-muted); margin-top: 10px;">Проверка модулей...</p>
+    </div>
+
+    <div id="screen-auth" class="screen">
+        <div class="auth-logo">DPO PORTAL</div>
+        <div class="input-group">
+            <label>Email / Логин</label>
+            <input type="email" placeholder="engineer@dpo.ru" id="auth-email">
+        </div>
+        <div class="input-group" id="pass-group">
+            <label>Пароль</label>
+            <input type="password" placeholder="••••••••" id="auth-pass">
+        </div>
+        <button class="btn-primary" onclick="login()">Войти в систему</button>
+        <div class="auth-links" onclick="alert('Эмуляция: Вы перешли на экран регистрации')">Нет аккаунта? Зарегистрироваться</div>
+    </div>
+
+    <div id="screen-main" class="screen">
+        <header>
+            <div>
+                <h1>Мониторинг</h1>
+                <div class="ble-status" id="ble-indicator" onclick="navTo('screen-ble')">
+                    <span class="material-icons" style="font-size: 16px;">bluetooth_disabled</span>
+                    Не подключено
+                </div>
+            </div>
+            <div>
+                <button class="icon-btn" onclick="navTo('screen-history')"><span class="material-icons">history</span></button>
+                <button class="icon-btn" style="margin-left: 10px;" onclick="navTo('screen-settings')"><span class="material-icons">settings</span></button>
+            </div>
+        </header>
+
+        <div class="target-section">
+            <div style="font-size: 0.85rem; color: var(--text-muted); display: flex; justify-content: space-between; width: 100%;">
+                <span>Допуск: ±2.0 мм</span>
+                <span id="status-badge" class="status-badge">ОЖИДАНИЕ</span>
+            </div>
+            <div class="target-container">
+                <div class="circle circle-2"></div>
+                <div class="circle circle-1"></div>
+                <div class="crosshair-x"></div>
+                <div class="crosshair-y"></div>
+                <div id="laser-dot" class="laser-dot"></div>
+            </div>
+        </div>
+
+        <div class="data-panel">
+            <div class="data-card" id="card-x">
+                <h2>ОСЬ X (мм)</h2>
+                <div class="value" id="val-x">--.---</div>
+            </div>
+            <div class="data-card" id="card-y">
+                <h2>ОСЬ Y (мм)</h2>
+                <div class="value" id="val-y">--.---</div>
+            </div>
+        </div>
+
+        <div class="controls-panel">
+            <!-- Убрали капс-лок для мягкого внешнего вида -->
+            <button class="btn-primary" id="btn-get-data" onclick="requestDataUpdate()" style="height: 60px;">Получить данные</button>
+        </div>
+    </div>
+
+    <div id="screen-ble" class="screen">
+        <header>
+            <div class="header-title">
+                <button class="icon-btn" onclick="navTo('screen-main')"><span class="material-icons">arrow_back</span></button>
+                Соединение BLE
+            </div>
+        </header>
+        <div class="radar-box">
+            <div class="radar"></div>
+            <span class="material-icons" style="position: absolute; color: var(--primary); font-size: 32px;">bluetooth_searching</span>
+        </div>
+        <div style="text-align: center; color: var(--text-muted); margin-bottom: 20px;" id="ble-status-text">
+            Поиск доступных датчиков рядом...
+        </div>
+        <div class="device-list" id="device-list" style="display: none;">
+            <div class="device-item" onclick="connectToDevice('DPO_CCD_X42')">
+                <div>
+                    <strong>DPO_CCD_X42</strong><br>
+                    <span style="font-size: 0.8rem; color: var(--text-muted);">MAC: 00:1B:44:11:3A:B7</span>
+                </div>
+                <span class="material-icons" style="color: var(--success);">signal_cellular_alt</span>
+            </div>
+            <div class="device-item" onclick="connectToDevice('DPO_CCD_Y11')">
+                <div>
+                    <strong>DPO_CCD_Y11</strong><br>
+                    <span style="font-size: 0.8rem; color: var(--text-muted);">MAC: 00:1B:44:89:12:F1</span>
+                </div>
+                <span class="material-icons" style="color: #666;">signal_cellular_1_bar</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="screen-history" class="screen">
+        <header>
+            <div class="header-title">
+                <button class="icon-btn" onclick="navTo('screen-main')"><span class="material-icons">arrow_back</span></button>
+                История замеров
+            </div>
+        </header>
+        <div class="history-list">
+            <div class="history-item">
+                <div class="hist-header">
+                    <span class="hist-obj"><span class="material-icons" style="font-size:14px; vertical-align:middle;">business</span> ЖК "Светлый", Секция 2</span>
+                    <span class="hist-date">Сегодня, 14:15</span>
+                </div>
+                <div class="hist-details">
+                    Сенсор: <b>DPO_CCD_X42</b><br>
+                    Отклонения: X: +0.85 мм / Y: -1.10 мм<br>
+                    <strong style="color: var(--success);">В ДОПУСКЕ (±2мм)</strong>
+                </div>
+            </div>
+            
+            <div class="history-item fail">
+                <div class="hist-header">
+                    <span class="hist-obj"><span class="material-icons" style="font-size:14px; vertical-align:middle;">business</span> ТЦ "Мегастрой", Опора 11</span>
+                    <span class="hist-date">06 Март 2026</span>
+                </div>
+                <div class="hist-details">
+                    Сенсор: <b>DPO_CCD_X42</b><br>
+                    Отклонения: X: +3.42 мм / Y: +0.20 мм<br>
+                    <strong style="color: var(--danger);">РАКОВИНА / ОТБРАКОВКА</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="screen-settings" class="screen">
+        <header>
+            <div class="header-title">
+                <button class="icon-btn" onclick="navTo('screen-main')"><span class="material-icons">arrow_back</span></button>
+                Настройки
+            </div>
+        </header>
+        <div style="padding: 20px;">
+            <div style="margin-bottom: 20px; color: var(--text-muted);">Аккаунт: <b>engineer@dpo.ru</b></div>
+            
+            <div style="background: var(--panel-bg); padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 10px;">Допуск по СНиП (мм)</label>
+                <input type="range" min="1" max="5" step="0.5" value="2" style="width: 100%;">
+                <div style="text-align: right; font-size: 0.8rem; color: var(--primary); margin-top: 5px;">Текущий: 2.0 мм</div>
+            </div>
+
+            <button class="btn-primary" style="background-color: transparent; border: 1px solid var(--danger); color: var(--danger);" onclick="logout()">Выйти из аккаунта</button>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    const APP_STATE = {
+        isBleConnected: false,
+        activeSensorId: null,
+        dataPollingId: null
+    };
+
+    function navTo(screenId) {
+        document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
+        document.getElementById(screenId).classList.add('active');
+
+        if(screenId === 'screen-ble') {
+            document.getElementById('device-list').style.display = 'none';
+            document.getElementById('ble-status-text').innerText = "Поиск доступных датчиков рядом...";
+            setTimeout(() => {
+                document.getElementById('device-list').style.display = 'block';
+                document.getElementById('ble-status-text').innerText = "Выберите датчик для сопряжения:";
+            }, 1500);
+        }
+    }
+
+    window.onload = () => {
+        setTimeout(() => { navTo('screen-auth'); }, 1500);
+    };
+
+    function login() { navTo('screen-main'); }
+
+    function logout() {
+        stopLaserPolling();
+        APP_STATE.isBleConnected = false;
+        updateBleUI();
+        navTo('screen-auth');
+    }
+
+    function connectToDevice(sensorId) {
+        document.getElementById('ble-status-text').innerText = `Подключение к ${sensorId}...`;
+        document.getElementById('device-list').style.display = 'none';
+        
+        setTimeout(() => {
+            APP_STATE.isBleConnected = true;
+            APP_STATE.activeSensorId = sensorId;
+            updateBleUI();
+            
+            navTo('screen-main');
+            startLaserPolling();
+        }, 1000);
+    }
+
+    function updateBleUI() {
+        const indicator = document.getElementById('ble-indicator');
+        if (APP_STATE.isBleConnected) {
+            indicator.classList.add('connected');
+            indicator.innerHTML = `<span class="material-icons" style="font-size: 16px;">bluetooth_connected</span> ${APP_STATE.activeSensorId}`;
+            // Убрали капс
+            document.getElementById('btn-get-data').innerText = "Остановить мониторинг";
+            document.getElementById('btn-get-data').style.backgroundColor = "#555";
+        } else {
+            indicator.classList.remove('connected');
+            indicator.innerHTML = `<span class="material-icons" style="font-size: 16px;">bluetooth_disabled</span> Не подключено`;
+            // Убрали капс
+            document.getElementById('btn-get-data').innerText = "Получить данные";
+            document.getElementById('btn-get-data').style.backgroundColor = "var(--primary)";
+        }
+    }
+
+    function requestDataUpdate() {
+        if (!APP_STATE.isBleConnected) {
+            navTo('screen-ble');
+            return;
+        }
+
+        if (APP_STATE.dataPollingId) {
+            stopLaserPolling();
+        } else {
+            startLaserPolling();
+        }
+    }
+
+    function startLaserPolling() {
+        if (APP_STATE.dataPollingId) return; 
+        
+        document.getElementById('laser-dot').classList.add('active');
+        // Убрали капс
+        document.getElementById('btn-get-data').innerText = "Остановить сбор данных";
+        document.getElementById('btn-get-data').style.backgroundColor = "#555";
+        
+        APP_STATE.dataPollingId = setInterval(() => {
+            updateDashboardData();
+        }, 500);
+    }
+
+    function stopLaserPolling() {
+        clearInterval(APP_STATE.dataPollingId);
+        APP_STATE.dataPollingId = null;
+        
+        document.getElementById('laser-dot').classList.remove('active');
+        document.getElementById('status-badge').innerText = "ОСТАНОВЛЕНО";
+        document.getElementById('status-badge').style.backgroundColor = "#333";
+        
+        document.getElementById('val-x').innerText = "--.---";
+        document.getElementById('val-x').style.color = "#555";
+        document.getElementById('val-y').innerText = "--.---";
+        document.getElementById('val-y').style.color = "#555";
+        
+        // Убрали капс
+        document.getElementById('btn-get-data').innerText = "Продолжить сбор";
+        document.getElementById('btn-get-data').style.backgroundColor = "var(--primary)";
+    }
+
+    function updateDashboardData() {
+        const baseOffsetX = 1.2; 
+        const baseOffsetY = -0.4;
+        const noiseX = (Math.random() - 0.5) * 0.08; 
+        const noiseY = (Math.random() - 0.5) * 0.08;
+
+        const valX = baseOffsetX + noiseX;
+        const valY = baseOffsetY + noiseY;
+        const tol = 2.0;
+        const totalDev = Math.sqrt(valX*valX + valY*valY);
+
+        const formatStr = (num) => (num > 0 ? '+' : '') + num.toFixed(3);
+        const elX = document.getElementById('val-x');
+        const elY = document.getElementById('val-y');
+        elX.innerText = formatStr(valX);
+        elY.innerText = formatStr(valY);
+        elX.style.color = "#fff";
+        elY.style.color = "#fff";
+
+        const badge = document.getElementById('status-badge');
+        if (totalDev > tol) {
+            badge.innerText = 'БРАК'; badge.style.backgroundColor = 'var(--danger)';
+        } else if (totalDev > tol * 0.8) {
+            badge.innerText = 'ВНИМАНИЕ'; badge.style.backgroundColor = 'var(--warning)'; badge.style.color = '#000';
+        } else {
+            badge.innerText = 'В НОРМЕ'; badge.style.backgroundColor = 'var(--success)'; badge.style.color = '#000';
+        }
+
+        const percentX = Math.max(0, Math.min(100, 50 + (valX / 4.0) * 50));
+        const percentY = Math.max(0, Math.min(100, 50 - (valY / 4.0) * 50));
+        const laserDot = document.getElementById('laser-dot');
+        laserDot.style.left = percentX + '%';
+        laserDot.style.top = percentY + '%';
+    }
+</script>
+
+</body>
+</html>
